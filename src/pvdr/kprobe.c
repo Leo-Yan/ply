@@ -282,6 +282,18 @@ static int kprobe_setattach(kprobe_t *kp, const char *func_and_offset,
 	snprintf(probename, sizeof(probename), "%s_%s_%ld_%d",
 		 kp->type, func, offs, G.self);
 
+	if (attach == 2) {
+		snprintf(fullprobename, sizeof(fullprobename),
+				 "%s", func);
+
+		id = probe_event_id(kp, fullprobename);
+		if (id < 0)
+			return id;
+
+		return probe_attach(kp, id);
+	}
+
+
 	/*
 	 * u[ret]probes are of form /path/to/execname:func+offset - replace ':'
 	 * and '/' elements. +offset is not currently supported.
@@ -382,6 +394,7 @@ static int kprobe_load(node_t *probe, prog_t *prog, const char *probestring,
 		       const char *type, kprobe_t **kpp)
 {
 	kprobe_t *kp;
+	char probename[KPROBE_MAXLEN];
 	char *func;
 
 	kp = probe_load(BPF_PROG_TYPE_KPROBE, probe, prog);
@@ -398,7 +411,14 @@ static int kprobe_load(node_t *probe, prog_t *prog, const char *probestring,
 
 	*kpp = kp;
 	func = strchr(probestring, ':') + 1;
-	return kprobe_setattach_pattern(kp, func, 1);
+
+	snprintf(probename, sizeof(probename),
+		"%s/%s", "/sys/kernel/debug/tracing/events", func);
+
+	if ( access( probename, F_OK ) != -1 )
+		return kprobe_setattach_pattern(kp, func, 2);
+	else
+		return kprobe_setattach_pattern(kp, func, 1);
 }
 
 static int kprobe_detach(kprobe_t *kp, const char *probestring)
